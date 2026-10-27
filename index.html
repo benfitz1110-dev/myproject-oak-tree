@@ -38,7 +38,7 @@
   </div>
 
   <!-- The object: hidden until you reach the spot. "View in AR" places it on the ground. -->
-  <model-viewer id="model" src="models/object.glb" alt="Hidden object"
+  <model-viewer id="model" src="models/ashtray.glb" alt="Hidden object"
                 ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor"
                 camera-controls auto-rotate shadow-intensity="1">
     <button slot="ar-button" id="ar">View in AR</button>
@@ -47,7 +47,7 @@
   <script>
     // ── YOUR SPOT: change these ──────────────────────────────
     // Default ≈ middle of the Oval. Stand on your spot, read "you:" on screen, paste it here.
-    const TARGET = { lat: 40.000211, lon: -83.011224 };
+    const TARGET = { lat: 40.000222, lon: -83.013446 };
     const RADIUS = 15; // metres. Phone GPS drifts 5–15 m.
     // ─────────────────────────────────────────────────────────
 

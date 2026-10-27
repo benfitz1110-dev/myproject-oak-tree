@@ -14,6 +14,7 @@
     button { font: inherit; font-size: 18px; padding: 14px 40px; border: 0; border-radius: 999px; background: #bb0000; color: #fff; font-weight: 600; }
     model-viewer { position: fixed; inset: 0; width: 100%; height: 100%; display: none; z-index: 10; background: #f4f1ec; }
     model-viewer.open { display: block; }
+    body.preview #panel { display: none; }
     #ar { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); }
     #scout { display: none; width: 100%; max-width: 420px; margin-top: 16px; }
     #scout.on { display: block; }
@@ -54,7 +55,20 @@
     const $status = document.getElementById("status");
     const $coords = document.getElementById("coords");
     const model = document.getElementById("model");
+    const PREVIEW = new URLSearchParams(location.search).has("preview");
     let unlocked = false;
+
+    function showModel() {
+      model.classList.add("open");
+      const playLoop = () => model.play({ repetitions: Infinity });
+      if (model.loaded) playLoop();
+      else model.addEventListener("load", playLoop, { once: true });
+    }
+
+    if (PREVIEW) {
+      document.body.classList.add("preview");
+      showModel();
+    }
 
     // ── Scout mode: add ?scout to the URL ──
     // Walk the Oval, tap "Mark this spot" where you'd like the object. Copy the line into TARGET.
@@ -92,7 +106,7 @@
       if (unlocked) return;
       if (d < RADIUS) {
         unlocked = true;
-        model.classList.add("open"); // ← opens the .glb
+        showModel();
         $status.textContent = "Found it.";
       } else {
         $status.textContent = `${Math.round(d)} m away · head ${compass(coords.latitude, coords.longitude)}`;

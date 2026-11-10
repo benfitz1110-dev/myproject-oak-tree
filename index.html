@@ -12,10 +12,14 @@
     #status { font-size: 20px; margin: 16px 0 4px; }
     #coords { font: 12px ui-monospace, monospace; opacity: .6; }
     button { font: inherit; font-size: 18px; padding: 14px 40px; border: 0; border-radius: 999px; background: #bb0000; color: #fff; font-weight: 600; }
-    model-viewer { position: fixed; inset: 0; width: 100%; height: 100%; display: none; z-index: 10; background: #f4f1ec; }
+    #object-stage { position: fixed; inset: 0; display: none; z-index: 10; background: #f4f1ec; }
+    #object-stage.open { display: block; }
+    model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; display: none; background: #f4f1ec; }
     model-viewer.open { display: block; }
     body.preview #panel { display: none; }
-    #ar { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); }
+    #close-model { position: absolute; z-index: 1; top: 16px; left: 16px; padding: 10px 16px; font-size: 15px; }
+    body.preview #close-model { display: none; }
+    model-viewer [slot="ar-button"] { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); }
     #scout { display: none; width: 100%; max-width: 420px; margin-top: 16px; }
     #scout.on { display: block; }
     #spots { list-style: none; padding: 0; margin: 16px 0 0; text-align: left; font: 13px ui-monospace, monospace; }
@@ -38,40 +42,82 @@
     </div>
   </div>
 
-  <!-- The object: hidden until you reach the spot. "View in AR" places it on the ground. -->
-  <model-viewer id="model" src="models/ashtray3.glb" alt="Hidden object"
-                ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor"
-                camera-controls auto-rotate shadow-intensity="1">
-    <button slot="ar-button" id="ar">View in AR</button>
-  </model-viewer>
+  <div id="object-stage">
+    <button id="close-model">Back to exploring</button>
+    <div id="models"></div>
+  </div>
 
   <script>
-    // ── YOUR SPOT: change these ──────────────────────────────
-    // Default ≈ middle of the Oval. Stand on your spot, read "you:" on screen, paste it here.
-    const TARGET = { lat: 40.000222, lon: -83.013446 };
+    // ADD EACH OBJECT HERE:
+    // 1. Put the .glb file in the models/ folder.
+    // 2. Set src to its filename, then replace lat and lon with the spot coordinates.
+    //    Use Scout mode (?scout) to collect coordinates at the spot.
+    // 3. Copy the example entry below for every additional object.
+    const OBJECTS = [
+      { src: "models/fixedcig+animation.glb", lat: 40.000055, lon: -83.010448, repetitions: 3 },
+      { src: "models/animatedLaptop.glb", lat: 39.999360, lon: -83.014299, repetitions: Infinity, delay: 4000, playAdditionalAnimations: true }
+      // Example: { src: "models/my-object.glb", lat: 40.000000, lon: -83.000000 },
+    ];
     const RADIUS = 15; // metres. Phone GPS drifts 5–15 m.
-    // ─────────────────────────────────────────────────────────
 
     const $status = document.getElementById("status");
     const $coords = document.getElementById("coords");
-    const model = document.getElementById("model");
+    const $stage = document.getElementById("object-stage");
     const PREVIEW = new URLSearchParams(location.search).has("preview");
-    let unlocked = false;
+    let activeObject = null;
+    let lastCoords = null;
 
-    function showModel() {
-      model.classList.add("open");
-      const playLoop = () => model.play({ repetitions: Infinity });
-      if (model.loaded) playLoop();
-      else model.addEventListener("load", playLoop, { once: true });
+    for (const object of OBJECTS) {
+      object.unlocked = false;
+      object.viewer = document.createElement("model-viewer");
+      object.viewer.setAttribute("src", object.src);
+      object.viewer.setAttribute("alt", "Found object");
+      object.viewer.setAttribute("ar", "");
+      object.viewer.setAttribute("ar-modes", "webxr scene-viewer quick-look");
+      object.viewer.setAttribute("ar-placement", "floor");
+      object.viewer.setAttribute("camera-controls", "");
+      object.viewer.setAttribute("auto-rotate", "");
+      object.viewer.setAttribute("shadow-intensity", "1");
+      const arButton = document.createElement("button");
+      arButton.slot = "ar-button";
+      arButton.textContent = "View in AR";
+      object.viewer.append(arButton);
+      document.getElementById("models").append(object.viewer);
     }
 
-    if (PREVIEW) {
+    function showModel(object) {
+      activeObject = object;
+      $stage.classList.add("open");
+      object.viewer.classList.add("open");
+      const playLoop = () => {
+        object.viewer.pause();
+        setTimeout(() => {
+          object.viewer.play({ repetitions: object.repetitions });
+          if (object.playAdditionalAnimations) {
+            for (const animationName of object.viewer.availableAnimations.slice(1)) {
+              object.viewer.appendAnimation(animationName, { repetitions: object.repetitions });
+            }
+          }
+        }, object.delay || 0);
+      };
+      if (object.viewer.loaded) playLoop();
+      else object.viewer.addEventListener("load", playLoop, { once: true });
+    }
+
+    document.getElementById("close-model").onclick = () => {
+      if (activeObject) activeObject.viewer.classList.remove("open");
+      activeObject = null;
+      $stage.classList.remove("open");
+      if (lastCoords) onPosition({ coords: lastCoords });
+    }
+
+    if (PREVIEW && OBJECTS.length) {
       document.body.classList.add("preview");
-      showModel();
+      showModel(OBJECTS[0]);
     }
 
     // ── Scout mode: add ?scout to the URL ──
-    // Walk the Oval, tap "Mark this spot" where you'd like the object. Copy the line into TARGET.
+    // Walk the Oval, tap "Mark this spot", then copy its coordinates into an OBJECTS entry.
     const SCOUT = location.search.includes("scout");
     let last = null;
     if (SCOUT) {
@@ -101,24 +147,46 @@
 
     // The GPS listener: runs every time the phone reports a new position.
     function onPosition({ coords }) {
-      const d = distance(coords.latitude, coords.longitude, TARGET.lat, TARGET.lon);
+      lastCoords = coords;
       $coords.textContent = `you: ${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)} · ±${Math.round(coords.accuracy)} m`;
-      if (unlocked) return;
-      if (d < RADIUS) {
-        unlocked = true;
-        showModel();
+      if (activeObject) return;
+      const nearest = OBJECTS.filter((object) => !object.unlocked)
+        .map((object) => ({ object, distance: distance(coords.latitude, coords.longitude, object.lat, object.lon) }))
+        .sort((a, b) => a.distance - b.distance)[0];
+      if (!nearest) {
+        $status.textContent = "You've found every object.";
+      } else if (nearest.distance < RADIUS) {
+        nearest.object.unlocked = true;
+        showModel(nearest.object);
         $status.textContent = "Found it.";
       } else {
-        $status.textContent = `${Math.round(d)} m away · head ${compass(coords.latitude, coords.longitude)}`;
+        $status.textContent = `${Math.round(nearest.distance)} m away · head ${compass(coords.latitude, coords.longitude, nearest.object.lat, nearest.object.lon)}`;
       }
     }
 
     // Desktop test without GPS: add ?fake to the URL. Walks you in from 60 m.
     function fakeWalk() {
-      let lat = TARGET.lat - 60 / 111320;
+      if (!OBJECTS.length) return;
+      let targetIndex = 0;
+      let lat = OBJECTS[0].lat - 60 / 111320;
+      let lon = OBJECTS[0].lon;
       setInterval(() => {
-        lat += 5 / 111320;
-        onPosition({ coords: { latitude: lat, longitude: TARGET.lon, accuracy: 0 } });
+        if (activeObject) return;
+        if (targetIndex >= OBJECTS.length) {
+          OBJECTS.forEach((object) => { object.unlocked = false; });
+          targetIndex = 0;
+          lat = OBJECTS[0].lat - 60 / 111320;
+          lon = OBJECTS[0].lon;
+        }
+        const target = OBJECTS[targetIndex];
+        if (targetIndex === 0 && distance(lat, lon, target.lat, target.lon) >= RADIUS) {
+          lat += 5 / 111320;
+        } else {
+          lat = target.lat;
+          lon = target.lon;
+        }
+        onPosition({ coords: { latitude: lat, longitude: lon, accuracy: 0 } });
+        if (target.unlocked) targetIndex++;
       }, 1000);
     }
 
@@ -148,10 +216,10 @@
         Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2;
       return 12742000 * Math.asin(Math.sqrt(a));
     }
-    function compass(lat, lon) {
+    function compass(lat, lon, targetLat, targetLon) {
       const r = Math.PI / 180;
-      const y = Math.sin((TARGET.lon - lon) * r) * Math.cos(TARGET.lat * r);
-      const x = Math.cos(lat * r) * Math.sin(TARGET.lat * r) - Math.sin(lat * r) * Math.cos(TARGET.lat * r) * Math.cos((TARGET.lon - lon) * r);
+      const y = Math.sin((targetLon - lon) * r) * Math.cos(targetLat * r);
+      const x = Math.cos(lat * r) * Math.sin(targetLat * r) - Math.sin(lat * r) * Math.cos(targetLat * r) * Math.cos((targetLon - lon) * r);
       return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(((Math.atan2(y, x) / r + 360) % 360) / 45) % 8];
     }
   </script>

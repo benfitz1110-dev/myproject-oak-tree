@@ -54,7 +54,7 @@
     //    Use Scout mode (?scout) to collect coordinates at the spot.
     // 3. Copy the example entry below for every additional object.
     const OBJECTS = [
-      { src: "models/fixedcig+animation.glb", lat: 40.000680, lon: -83.011150, repetitions: 3, playAdditionalAnimations: true },
+      { src: "models/fixedcig+animation.glb", lat: 40.000680, lon: -83.011150, repetitions: 3, playAdditionalAnimations: true, arModes: "webxr" },
       { src: "models/animatedLaptop.glb", lat: 40.000638, lon: -83.011154, repetitions: Infinity, delay: 4000, playAdditionalAnimations: true }
       // Example: { src: "models/my-object.glb", lat: 40.000000, lon: -83.000000 },
     ];
@@ -74,7 +74,7 @@
       object.viewer.setAttribute("src", object.src);
       object.viewer.setAttribute("alt", "Found object");
       object.viewer.setAttribute("ar", "");
-      object.viewer.setAttribute("ar-modes", "webxr scene-viewer quick-look");
+      object.viewer.setAttribute("ar-modes", object.arModes || "webxr scene-viewer quick-look");
       object.viewer.setAttribute("ar-placement", "floor");
       object.viewer.setAttribute("camera-controls", "");
       object.viewer.setAttribute("auto-rotate", "");

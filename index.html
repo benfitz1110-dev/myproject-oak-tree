@@ -45,7 +45,7 @@
   <div id="object-stage">
     <button id="close-model">Back to exploring</button>
     <div id="models">
-      <!-- Cigarette model: autoplay its first clip; the script queues the remaining clips after unlock. -->
+      <!-- Cigarette viewer: use the snippet's autoplay and animation settings. -->
       <model-viewer id="model" src="models/fixedcig+animation.glb" alt="Hidden object"
         ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor"
         camera-controls autoplay animation-name="CubeAction" shadow-intensity="1">
@@ -62,8 +62,8 @@
     //    Use Scout mode (?scout) to collect coordinates at the spot.
     // 3. Copy the example entry below for every additional object.
     const OBJECTS = [
-      { src: "models/fixedcig+animation.glb", lat: 40.000680, lon: -83.011150, repetitions: 3, playAdditionalAnimations: true },
-      { src: "models/animatedLaptop.glb", lat: 40.000638, lon: -83.011154, repetitions: Infinity, delay: 4000, playAdditionalAnimations: true }
+      { src: "models/fixedcig+animation.glb", lat: 40.000680, lon: -83.011150 },
+      { src: "models/animatedLaptop.glb", lat: 40.000638, lon: -83.011154 }
       // Example: { src: "models/my-object.glb", lat: 40.000000, lon: -83.000000 },
     ];
     const RADIUS = 15; // metres. Phone GPS drifts 5–15 m.
@@ -81,8 +81,9 @@
       object.viewer = object.src === "models/fixedcig+animation.glb"
         ? document.getElementById("model")
         : document.createElement("model-viewer");
+      // Disable model-viewer auto-rotation for every object.
+      object.viewer.autoRotate = false;
       if (object.viewer.id !== "model") {
-        object.viewer.setAttribute("autoplay", "");
         object.viewer.setAttribute("src", object.src);
         object.viewer.setAttribute("alt", "Found object");
         object.viewer.setAttribute("ar", "");
@@ -102,19 +103,6 @@
       activeObject = object;
       $stage.classList.add("open");
       object.viewer.classList.add("open");
-      const playLoop = () => {
-        object.viewer.pause();
-        setTimeout(() => {
-          object.viewer.play({ repetitions: object.repetitions });
-          if (object.playAdditionalAnimations) {
-            for (const animationName of object.viewer.availableAnimations.slice(1)) {
-              object.viewer.appendAnimation(animationName, { repetitions: object.repetitions });
-            }
-          }
-        }, object.delay || 0);
-      };
-      if (object.viewer.loaded) playLoop();
-      else object.viewer.addEventListener("load", playLoop, { once: true });
     }
 
     document.getElementById("close-model").onclick = () => {

@@ -44,7 +44,15 @@
 
   <div id="object-stage">
     <button id="close-model">Back to exploring</button>
-    <div id="models"></div>
+    <div id="models">
+      <!-- Cigarette model: autoplay its first clip; the script queues the remaining clips after unlock. -->
+      <model-viewer id="model" src="models/fixedcig+animation.glb" alt="Hidden object"
+        ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor"
+        camera-controls autoplay animation-name="CubeAction" shadow-intensity="1">
+        <!-- This button launches the model in the device's available AR viewer. -->
+        <button slot="ar-button" id="ar">View in AR</button>
+      </model-viewer>
+    </div>
   </div>
 
   <script>
@@ -54,7 +62,7 @@
     //    Use Scout mode (?scout) to collect coordinates at the spot.
     // 3. Copy the example entry below for every additional object.
     const OBJECTS = [
-      { src: "models/fixedcig+animation.glb", lat: 40.000680, lon: -83.011150, repetitions: 3, playAdditionalAnimations: true, arModes: "webxr" },
+      { src: "models/fixedcig+animation.glb", lat: 40.000680, lon: -83.011150, repetitions: 3, playAdditionalAnimations: true },
       { src: "models/animatedLaptop.glb", lat: 40.000638, lon: -83.011154, repetitions: Infinity, delay: 4000, playAdditionalAnimations: true }
       // Example: { src: "models/my-object.glb", lat: 40.000000, lon: -83.000000 },
     ];
@@ -69,21 +77,25 @@
 
     for (const object of OBJECTS) {
       object.unlocked = false;
-      object.viewer = document.createElement("model-viewer");
-      object.viewer.setAttribute("autoplay", "");
-      object.viewer.setAttribute("src", object.src);
-      object.viewer.setAttribute("alt", "Found object");
-      object.viewer.setAttribute("ar", "");
-      object.viewer.setAttribute("ar-modes", object.arModes || "webxr scene-viewer quick-look");
-      object.viewer.setAttribute("ar-placement", "floor");
-      object.viewer.setAttribute("camera-controls", "");
-      object.viewer.setAttribute("auto-rotate", "");
-      object.viewer.setAttribute("shadow-intensity", "1");
-      const arButton = document.createElement("button");
-      arButton.slot = "ar-button";
-      arButton.textContent = "View in AR";
-      object.viewer.append(arButton);
-      document.getElementById("models").append(object.viewer);
+      // Reuse the preconfigured cigarette viewer; create viewers dynamically for other objects.
+      object.viewer = object.src === "models/fixedcig+animation.glb"
+        ? document.getElementById("model")
+        : document.createElement("model-viewer");
+      if (object.viewer.id !== "model") {
+        object.viewer.setAttribute("autoplay", "");
+        object.viewer.setAttribute("src", object.src);
+        object.viewer.setAttribute("alt", "Found object");
+        object.viewer.setAttribute("ar", "");
+        object.viewer.setAttribute("ar-modes", object.arModes || "webxr scene-viewer quick-look");
+        object.viewer.setAttribute("ar-placement", "floor");
+        object.viewer.setAttribute("camera-controls", "");
+        object.viewer.setAttribute("shadow-intensity", "1");
+        const arButton = document.createElement("button");
+        arButton.slot = "ar-button";
+        arButton.textContent = "View in AR";
+        object.viewer.append(arButton);
+        document.getElementById("models").append(object.viewer);
+      }
     }
 
     function showModel(object) {

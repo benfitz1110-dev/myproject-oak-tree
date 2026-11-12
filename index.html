@@ -34,7 +34,6 @@
     <button id="go">Start</button>
     <div id="status"></div>
     <div id="coords"></div>
-    <button id="open-nearby" hidden>View nearby object</button>
 
     <!-- Scout mode (?scout): walk the Oval and mark candidate spots -->
     <div id="scout">
@@ -55,8 +54,8 @@
     //    Use Scout mode (?scout) to collect coordinates at the spot.
     // 3. Copy the example entry below for every additional object.
     const OBJECTS = [
-      { src: "models/fixedcig+animation.glb", lat: 40.000680, lon: -83.011150, repetitions: 3, playAdditionalAnimations: true, arModes: "webxr" },
-      { src: "models/animatedLaptop.glb", lat: 40.000638, lon: -83.011154, repetitions: Infinity, delay: 4000, playAdditionalAnimations: true }
+      { src: "models/fixedcig+animation.glb", lat: 40.000055, lon: -83.010448, repetitions: 3, playAdditionalAnimations: true },
+      { src: "models/animatedLaptop.glb", lat: 39.999360, lon: -83.014299, repetitions: Infinity, delay: 4000, playAdditionalAnimations: true }
       // Example: { src: "models/my-object.glb", lat: 40.000000, lon: -83.000000 },
     ];
     const RADIUS = 15; // metres. Phone GPS drifts 5–15 m.
@@ -64,23 +63,9 @@
     const $status = document.getElementById("status");
     const $coords = document.getElementById("coords");
     const $stage = document.getElementById("object-stage");
-    const params = new URLSearchParams(location.search);
-    const PREVIEW = params.has("preview");
-    const SCOUT = params.has("scout");
-    const FAKE = !SCOUT && params.has("fake");
-    const $go = document.getElementById("go");
-    const $openNearby = document.getElementById("open-nearby");
+    const PREVIEW = new URLSearchParams(location.search).has("preview");
     let activeObject = null;
     let lastCoords = null;
-    let stopAnimation = () => {};
-    let gpsWatch = null;
-    let waitForNearbyTap = false;
-
-    $openNearby.onclick = () => {
-      if (!lastCoords) return;
-      waitForNearbyTap = false;
-      onPosition({ coords: lastCoords });
-    };
 
     for (const object of OBJECTS) {
       object.unlocked = false;
@@ -103,40 +88,28 @@
     function showModel(object) {
       activeObject = object;
       $stage.classList.add("open");
-      const viewer = object.viewer;
-      viewer.classList.add("open");
-      let timer;
-      const schedulePlayback = () => {
-        timer = setTimeout(() => {
-          if (activeObject !== object || !viewer.availableAnimations.length) return;
-          viewer.play({ repetitions: object.repetitions });
+      object.viewer.classList.add("open");
+      const playLoop = () => {
+        object.viewer.pause();
+        setTimeout(() => {
+          object.viewer.play({ repetitions: object.repetitions });
           if (object.playAdditionalAnimations) {
-            for (const animationName of viewer.availableAnimations.slice(1)) {
-              viewer.appendAnimation(animationName, { repetitions: object.repetitions });
+            for (const animationName of object.viewer.availableAnimations.slice(1)) {
+              object.viewer.appendAnimation(animationName, { repetitions: object.repetitions });
             }
           }
         }, object.delay || 0);
       };
-      if (viewer.loaded) schedulePlayback();
-      else viewer.addEventListener("load", schedulePlayback, { once: true });
-      stopAnimation = () => {
-        clearTimeout(timer);
-        viewer.removeEventListener("load", schedulePlayback);
-        if (viewer.loaded) viewer.pause();
-      };
+      if (object.viewer.loaded) playLoop();
+      else object.viewer.addEventListener("load", playLoop, { once: true });
     }
 
     document.getElementById("close-model").onclick = () => {
-      if (!activeObject) return;
-      stopAnimation();
-      activeObject.viewer.classList.remove("open");
+      if (activeObject) activeObject.viewer.classList.remove("open");
       activeObject = null;
       $stage.classList.remove("open");
-      if (!FAKE && lastCoords) {
-        waitForNearbyTap = true;
-        onPosition({ coords: lastCoords });
-      }
-    };
+      if (lastCoords) onPosition({ coords: lastCoords });
+    }
 
     if (PREVIEW && OBJECTS.length) {
       document.body.classList.add("preview");
@@ -145,103 +118,76 @@
 
     // ── Scout mode: add ?scout to the URL ──
     // Walk the Oval, tap "Mark this spot", then copy its coordinates into an OBJECTS entry.
+    const SCOUT = location.search.includes("scout");
     let last = null;
     if (SCOUT) {
       document.querySelector("h1").textContent = "Scout the Oval";
       document.querySelector("#panel p").textContent = "Walk around and mark the spots you like.";
     }
 
-    function onGpsError(err) {
-      if (gpsWatch !== null) {
-        navigator.geolocation.clearWatch(gpsWatch);
-        gpsWatch = null;
-      }
-      lastCoords = null;
-      $openNearby.hidden = true;
-      $status.textContent = "GPS error: " + err.message;
-      $go.textContent = "Try again";
-      $go.hidden = false;
-    }
-
-    function onScoutPosition({ coords }) {
-      last = coords;
-      $status.textContent = `±${Math.round(coords.accuracy)} m ${coords.accuracy <= 10 ? "· good" : "· wait…"}`;
-      $coords.textContent = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
-    }
-
-    $go.onclick = () => {
-      if ($go.hidden) return;
-      $go.hidden = true;
-      if (FAKE) {
-        fakeWalk();
-        return;
-      }
-      if (!navigator.geolocation) {
-        onGpsError({ message: "This browser doesn't provide location access." });
-        return;
-      }
+    document.getElementById("go").onclick = (e) => {
+      e.target.remove();
       if (SCOUT) {
         document.getElementById("scout").classList.add("on");
         renderSpots();
+        navigator.geolocation.watchPosition(({ coords }) => {
+          last = coords;
+          $status.textContent = `±${Math.round(coords.accuracy)} m ${coords.accuracy <= 10 ? "· good" : "· wait…"}`;
+          $coords.textContent = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
+        }, (err) => ($status.textContent = "GPS error: " + err.message), { enableHighAccuracy: true });
+        $status.textContent = "Waiting for GPS…";
+        return;
       }
+      if (location.search.includes("fake")) return fakeWalk();
+      navigator.geolocation.watchPosition(onPosition,
+        (err) => ($status.textContent = "GPS error: " + err.message),
+        { enableHighAccuracy: true });
       $status.textContent = "Waiting for GPS…";
-      gpsWatch = navigator.geolocation.watchPosition(
-        SCOUT ? onScoutPosition : onPosition,
-        onGpsError,
-        { enableHighAccuracy: true, timeout: 15000 }
-      );
     };
 
     // The GPS listener: runs every time the phone reports a new position.
-    function onPosition({ coords }, candidates = OBJECTS) {
+    function onPosition({ coords }) {
       lastCoords = coords;
       $coords.textContent = `you: ${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)} · ±${Math.round(coords.accuracy)} m`;
       if (activeObject) return;
-      const nearest = candidates.filter((object) => !object.unlocked)
+      const nearest = OBJECTS.filter((object) => !object.unlocked)
         .map((object) => ({ object, distance: distance(coords.latitude, coords.longitude, object.lat, object.lon) }))
         .sort((a, b) => a.distance - b.distance)[0];
-      $openNearby.hidden = true;
       if (!nearest) {
         $status.textContent = "You've found every object.";
       } else if (nearest.distance < RADIUS) {
-        if (waitForNearbyTap) {
-          $status.textContent = "Another object is nearby.";
-          $openNearby.hidden = false;
-          return;
-        }
         nearest.object.unlocked = true;
         showModel(nearest.object);
         $status.textContent = "Found it.";
       } else {
-        waitForNearbyTap = false;
         $status.textContent = `${Math.round(nearest.distance)} m away · head ${compass(coords.latitude, coords.longitude, nearest.object.lat, nearest.object.lon)}`;
       }
     }
 
-    // Desktop test without GPS: approach each object in order and finish once.
+    // Desktop test without GPS: add ?fake to the URL. Walks you in from 60 m.
     function fakeWalk() {
+      if (!OBJECTS.length) return;
       let targetIndex = 0;
-      let metresSouth = 60;
-      const step = () => {
+      let lat = OBJECTS[0].lat - 60 / 111320;
+      let lon = OBJECTS[0].lon;
+      setInterval(() => {
         if (activeObject) return;
+        if (targetIndex >= OBJECTS.length) {
+          OBJECTS.forEach((object) => { object.unlocked = false; });
+          targetIndex = 0;
+          lat = OBJECTS[0].lat - 60 / 111320;
+          lon = OBJECTS[0].lon;
+        }
         const target = OBJECTS[targetIndex];
-        if (!target) {
-          clearInterval(timer);
-          $status.textContent = "You've found every object.";
-          return;
-        }
-        onPosition({
-          coords: { latitude: target.lat - metresSouth / 111320, longitude: target.lon, accuracy: 0 }
-        }, [target]);
-        if (target.unlocked) {
-          targetIndex++;
-          metresSouth = 60;
+        if (targetIndex === 0 && distance(lat, lon, target.lat, target.lon) >= RADIUS) {
+          lat += 5 / 111320;
         } else {
-          metresSouth = Math.max(0, metresSouth - 5);
+          lat = target.lat;
+          lon = target.lon;
         }
-      };
-      const timer = setInterval(step, 1000);
-      step();
+        onPosition({ coords: { latitude: lat, longitude: lon, accuracy: 0 } });
+        if (target.unlocked) targetIndex++;
+      }, 1000);
     }
 
     document.getElementById("mark").onclick = () => {

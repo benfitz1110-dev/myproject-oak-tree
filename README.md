@@ -1,5 +1,5 @@
 
-Temporary Euphoria
+Temporary 
 
 **Live page: [AR Experience](https://benfitz1110-dev.github.io/myproject-oak-tree/)**
 
